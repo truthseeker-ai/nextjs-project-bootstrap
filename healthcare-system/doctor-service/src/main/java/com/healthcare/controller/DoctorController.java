@@ -1,125 +1,149 @@
 package com.healthcare.controller;
 
-import com.healthcare.dto.*;
+import com.healthcare.dto.DoctorDTO;
+import com.healthcare.dto.ProfileUpdateRequest;
 import com.healthcare.service.DoctorService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
-/**
- * REST controller for doctor-related operations
- * Exposes endpoints for doctor authentication, registration, and profile management
- */
 @RestController
 @RequestMapping("/api/doctors")
-@RequiredArgsConstructor
+@Tag(name = "Doctor Management", description = "APIs for managing doctor information and profiles")
+@SecurityRequirement(name = "Bearer Authentication")
 public class DoctorController {
 
-    private final DoctorService doctorService;
+    @Autowired
+    private DoctorService doctorService;
 
-    /**
-     * Authenticate doctor
-     * @param authRequest Login credentials
-     * @return Authentication response with JWT token
-     */
-    @PostMapping("/auth/login")
-    public ResponseEntity<AuthResponse> authenticate(@RequestBody @Valid AuthRequest authRequest) {
-        return ResponseEntity.ok(doctorService.authenticate(authRequest));
+    @GetMapping
+    @Operation(
+        summary = "Get all doctors",
+        description = "Retrieve a list of all registered doctors",
+        responses = {
+            @ApiResponse(
+                responseCode = "200",
+                description = "List of doctors retrieved successfully",
+                content = @Content(schema = @Schema(implementation = DoctorDTO.class))
+            )
+        }
+    )
+    public ResponseEntity<List<DoctorDTO>> getAllDoctors() {
+        return ResponseEntity.ok(doctorService.getAllDoctors());
     }
 
-    /**
-     * Register new doctor
-     * @param doctorDTO Doctor registration details
-     * @return Registered doctor details
-     */
-    @PostMapping("/auth/register")
-    public ResponseEntity<DoctorDTO> register(@RequestBody @Valid DoctorDTO doctorDTO) {
-        return ResponseEntity.ok(doctorService.register(doctorDTO));
-    }
-
-    /**
-     * Get doctor by ID
-     * @param id Doctor ID
-     * @return Doctor details
-     */
     @GetMapping("/{id}")
-    public ResponseEntity<DoctorDTO> getDoctor(@PathVariable Long id) {
+    @Operation(
+        summary = "Get doctor by ID",
+        description = "Retrieve a specific doctor's information by their ID",
+        responses = {
+            @ApiResponse(
+                responseCode = "200",
+                description = "Doctor found",
+                content = @Content(schema = @Schema(implementation = DoctorDTO.class))
+            ),
+            @ApiResponse(
+                responseCode = "404",
+                description = "Doctor not found"
+            )
+        }
+    )
+    public ResponseEntity<DoctorDTO> getDoctorById(
+        @Parameter(description = "ID of the doctor", required = true)
+        @PathVariable Long id
+    ) {
         return ResponseEntity.ok(doctorService.getDoctorById(id));
     }
 
-    /**
-     * Update doctor profile
-     * @param id Doctor ID
-     * @param doctorDTO Updated doctor details
-     * @return Updated doctor details
-     */
-    @PutMapping("/{id}")
-    public ResponseEntity<DoctorDTO> updateDoctor(
-            @PathVariable Long id,
-            @RequestBody @Valid DoctorDTO doctorDTO) {
-        return ResponseEntity.ok(doctorService.updateDoctor(id, doctorDTO));
+    @GetMapping("/{id}/profile")
+    @Operation(
+        summary = "Get doctor's profile",
+        description = "Retrieve detailed profile information for a specific doctor"
+    )
+    public ResponseEntity<DoctorDTO> getDoctorProfile(
+        @Parameter(description = "ID of the doctor", required = true)
+        @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(doctorService.getDoctorProfile(id));
     }
 
-    /**
-     * Update doctor availability slots
-     * @param id Doctor ID
-     * @param request Availability request
-     * @return Updated doctor details
-     */
-    @PutMapping("/{id}/availability")
-    public ResponseEntity<DoctorDTO> updateAvailability(
-            @PathVariable Long id,
-            @RequestBody @Valid AvailabilityRequest request) {
-        return ResponseEntity.ok(doctorService.updateAvailability(id, request));
+    @PutMapping("/{id}/profile")
+    @PreAuthorize("hasRole('DOCTOR') and @securityService.isCurrentUser(#id)")
+    @Operation(
+        summary = "Update doctor's profile",
+        description = "Update profile information for the authenticated doctor"
+    )
+    public ResponseEntity<DoctorDTO> updateProfile(
+        @Parameter(description = "ID of the doctor", required = true)
+        @PathVariable Long id,
+        @Valid @RequestBody ProfileUpdateRequest request
+    ) {
+        return ResponseEntity.ok(doctorService.updateProfile(id, request));
     }
 
-    /**
-     * Find doctors by specialization
-     * @param specialization Medical specialization
-     * @return List of matching doctors
-     */
-    @GetMapping("/specialization/{specialization}")
-    public ResponseEntity<List<DoctorDTO>> findBySpecialization(
-            @PathVariable String specialization) {
-        return ResponseEntity.ok(doctorService.findBySpecialization(specialization));
+    @PostMapping("/{id}/profile-image")
+    @PreAuthorize("hasRole('DOCTOR') and @securityService.isCurrentUser(#id)")
+    @Operation(
+        summary = "Upload profile image",
+        description = "Upload or update the doctor's profile image"
+    )
+    public ResponseEntity<DoctorDTO> uploadProfileImage(
+        @Parameter(description = "ID of the doctor", required = true)
+        @PathVariable Long id,
+        @Parameter(description = "Profile image file", required = true)
+        @RequestParam("file") MultipartFile file
+    ) {
+        return ResponseEntity.ok(doctorService.updateProfileImage(id, file));
     }
 
-    /**
-     * Find available doctors in time range
-     * @param startTime Start time (ISO format)
-     * @param endTime End time (ISO format)
-     * @return List of available doctors
-     */
-    @GetMapping("/available")
-    public ResponseEntity<List<DoctorDTO>> findAvailableDoctors(
-            @RequestParam LocalDateTime startTime,
-            @RequestParam LocalDateTime endTime) {
-        return ResponseEntity.ok(doctorService.findAvailableDoctors(startTime, endTime));
+    @GetMapping("/{id}/stats")
+    @PreAuthorize("hasRole('DOCTOR') and @securityService.isCurrentUser(#id)")
+    @Operation(
+        summary = "Get doctor's statistics",
+        description = "Retrieve statistics about appointments and patients for the doctor"
+    )
+    public ResponseEntity<Map<String, Object>> getDoctorStats(
+        @Parameter(description = "ID of the doctor", required = true)
+        @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(doctorService.getDoctorStats(id));
     }
 
-    /**
-     * Get top rated doctors
-     * @param limit Number of doctors to return
-     * @return List of top rated doctors
-     */
-    @GetMapping("/top-rated")
-    public ResponseEntity<List<DoctorDTO>> getTopRatedDoctors(
-            @RequestParam(defaultValue = "10") int limit) {
-        return ResponseEntity.ok(doctorService.getTopRatedDoctors(limit));
+    @GetMapping("/specializations")
+    @Operation(
+        summary = "Get all specializations",
+        description = "Retrieve a list of all available doctor specializations"
+    )
+    public ResponseEntity<List<String>> getAllSpecializations() {
+        return ResponseEntity.ok(doctorService.getAllSpecializations());
     }
 
-    /**
-     * Delete doctor
-     * @param id Doctor ID
-     * @return No content response
-     */
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteDoctor(@PathVariable Long id) {
-        doctorService.deleteDoctor(id);
-        return ResponseEntity.noContent().build();
+    @GetMapping("/search")
+    @Operation(
+        summary = "Search doctors",
+        description = "Search for doctors based on various criteria"
+    )
+    public ResponseEntity<List<DoctorDTO>> searchDoctors(
+        @Parameter(description = "Specialization to filter by")
+        @RequestParam(required = false) String specialization,
+        @Parameter(description = "Name to search for")
+        @RequestParam(required = false) String name,
+        @Parameter(description = "Minimum rating to filter by")
+        @RequestParam(required = false) Double rating
+    ) {
+        return ResponseEntity.ok(doctorService.searchDoctors(specialization, name, rating));
     }
 }
