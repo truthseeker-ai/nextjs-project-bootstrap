@@ -1,156 +1,177 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import LoadingSpinner from '../../components/LoadingSpinner';
+import Alert from '../../components/Alert';
 
 function DoctorDashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [alert, setAlert] = useState(null);
   const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    todayAppointments: 0,
+    pendingAppointments: 0,
+    totalPatients: 0
+  });
 
   useEffect(() => {
-    const fetchAppointments = async () => {
-      try {
-        const response = await axios.get('/api/doctor/appointments');
-        setAppointments(response.data);
-      } catch (error) {
-        console.error('Error fetching appointments:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAppointments();
+    fetchDashboardData();
   }, []);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const updateAppointmentStatus = async (appointmentId, status) => {
+  const fetchDashboardData = async () => {
     try {
-      await axios.put(`/api/doctor/appointments/${appointmentId}`, { status });
-      setAppointments(prev => prev.map(app => 
-        app.id === appointmentId ? { ...app, status } : app
-      ));
+      setLoading(true);
+      const [appointmentsRes, statsRes] = await Promise.all([
+        axios.get(`/api/appointments/doctor/${user.id}`),
+        axios.get(`/api/doctors/${user.id}/stats`)
+      ]);
+
+      setAppointments(appointmentsRes.data);
+      setStats(statsRes.data);
     } catch (error) {
-      console.error('Error updating appointment:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to fetch dashboard data'
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   if (loading) {
-    return <div className="flex justify-center items-center h-screen">Loading...</div>;
+    return <LoadingSpinner />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">Doctor Dashboard</h1>
-          <div className="flex items-center space-x-4">
-            <span className="text-gray-700">Welcome, Dr. {user?.name}</span>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {alert && (
+        <Alert
+          type={alert.type}
+          message={alert.message}
+          onClose={() => setAlert(null)}
+        />
+      )}
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-            <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">
-                Your Appointments
-              </h3>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">
+          Welcome, Dr. {user.name}
+        </h1>
+        <p className="mt-2 text-gray-600">
+          Manage your appointments and schedule
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-medium text-gray-900">Today's Appointments</h3>
+          <p className="mt-2 text-3xl font-bold text-indigo-600">
+            {stats.todayAppointments}
+          </p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-medium text-gray-900">Pending Appointments</h3>
+          <p className="mt-2 text-3xl font-bold text-yellow-600">
+            {stats.pendingAppointments}
+          </p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-medium text-gray-900">Total Patients</h3>
+          <p className="mt-2 text-3xl font-bold text-green-600">
+            {stats.totalPatients}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">
+                Upcoming Appointments
+              </h2>
+              <Link
+                to="/doctor/appointments"
+                className="text-indigo-600 hover:text-indigo-800"
+              >
+                View all
+              </Link>
             </div>
-            
             {appointments.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Patient
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Time
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {appointments.map((appointment) => (
-                      <tr key={appointment.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {appointment.patientName}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {appointment.patientEmail}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(appointment.date).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {appointment.time}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            appointment.status === 'CONFIRMED' 
-                              ? 'bg-green-100 text-green-800' 
-                              : appointment.status === 'CANCELLED'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {appointment.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          {appointment.status === 'PENDING' && (
-                            <div className="space-x-2">
-                              <button
-                                onClick={() => updateAppointmentStatus(appointment.id, 'CONFIRMED')}
-                                className="text-green-600 hover:text-green-900"
-                              >
-                                Confirm
-                              </button>
-                              <button
-                                onClick={() => updateAppointmentStatus(appointment.id, 'CANCELLED')}
-                                className="text-red-600 hover:text-red-900"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-4">
+                {appointments.slice(0, 5).map((appointment) => (
+                  <div
+                    key={appointment.id}
+                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {appointment.patientName}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {new Date(appointment.dateTime).toLocaleString()}
+                      </p>
+                    </div>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        appointment.status === 'CONFIRMED'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}
+                    >
+                      {appointment.status}
+                    </span>
+                  </div>
+                ))}
               </div>
             ) : (
-              <div className="px-4 py-5 sm:p-6 text-center">
-                <p className="text-gray-500">You don't have any appointments yet.</p>
-              </div>
+              <p className="text-gray-500 text-center py-4">
+                No upcoming appointments
+              </p>
             )}
           </div>
         </div>
-      </main>
+
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">
+                Schedule Management
+              </h2>
+              <Link
+                to="/doctor/schedule"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                Manage Schedule
+              </Link>
+            </div>
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <p className="text-gray-600">
+                  Set your availability, manage appointments, and configure your working hours.
+                </p>
+                <div className="mt-4 space-y-2">
+                  <Link
+                    to="/doctor/schedule/new"
+                    className="block text-indigo-600 hover:text-indigo-800"
+                  >
+                    ➜ Create new schedule
+                  </Link>
+                  <Link
+                    to="/doctor/schedule/view"
+                    className="block text-indigo-600 hover:text-indigo-800"
+                  >
+                    ➜ View current schedule
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
